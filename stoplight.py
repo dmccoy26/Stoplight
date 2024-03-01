@@ -1,7 +1,6 @@
 import os
 import random
 import time
-import statistics
 from collections import deque
 
 class Stoplight:
@@ -16,7 +15,6 @@ class Stoplight:
         self.change_time_ew = float('inf')  # Initially, no change scheduled for East-West
         self.queues = {direction: deque() for direction in ["North", "South", "East", "West"]}
         self.red_light_violations = 0
-        self.stopped_cars_at_red_light = 0
         self.fine_per_car = 286
         self.red_light_violation_percentage = 0.1
         self.total_fines_collected = 0
@@ -24,46 +22,40 @@ class Stoplight:
         self.cycle_count = {"North": 0, "South": 0, "East": 0, "West": 0}
         self.green_duration_ns = green_duration_ns  # Duration of green light for North/South
         self.yellow_duration_ns = yellow_duration_ns  # Duration of yellow light for North/South
-        self.red_duration_ns = red_duration_ns   #Duration of red light for North/South
+        self.red_duration_ns = red_duration_ns   # Duration of red light for North/South
         self.green_duration_ew = green_duration_ns  # Duration of green light for East/West
         self.yellow_duration_ew = yellow_duration_ns  # Duration of yellow light for East/West
-        self.red_duration_ns = red_duration_ns   #Duration of red light for East/West
+        self.red_duration_ew = red_duration_ns   # Duration of red light for East/West
 
-        self.change_time_ns = time.time() + self.green_duration_ns + self.yellow_duration_ns # Initial change time for North/South
-        self.change_time_ew = time.time() + self.green_duration_ew  + self.yellow_duration_ew # Initial change time for East/West
+        self.change_time_ns = time.time() + self.green_duration_ns
+        self.change_time_ew = time.time() + self.red_duration_ns  # Initially, East/West is red for the duration of NS green
 
     def update_state(self):
         current_time = time.time()
 
-        # Check if it's time to change the North/South light state
+        # North/South light state change
         if current_time >= self.change_time_ns:
             if self.ns_state == "Green":
                 self.ns_state = "Yellow"
-                self.ew_state = "Red"
                 self.change_time_ns = current_time + self.yellow_duration_ns
             elif self.ns_state == "Yellow":
                 self.ns_state = "Red"
-                self.ew_state = "Green"
-                self.change_time_ns = current_time + self.green_duration_ew
+                self.ew_state = "Green"  # Corrected to ensure EW turns green when NS turns red
+                self.change_time_ew = current_time + self.green_duration_ew + self.yellow_duration_ew
+            elif self.ns_state == "Red" and current_time >= self.change_time_ew + self.red_duration_ew:
+                self.ns_state = "Green"
+                self.ew_state = "Red"
+                self.change_time_ns = current_time + self.green_duration_ns
 
-        # Check if it's time to change the East/West light state
+        # East/West light state change
         if current_time >= self.change_time_ew:
             if self.ew_state == "Green":
                 self.ew_state = "Yellow"
-                self.ns_state = "Red"
                 self.change_time_ew = current_time + self.yellow_duration_ew
             elif self.ew_state == "Yellow":
                 self.ew_state = "Red"
-                self.ns_state = "Green"
-                self.change_time_ew = current_time + self.green_duration_ew
-
-        # Update cycle count
-        if self.ns_state == "Green" and self.ew_state == "Red":
-            self.cycle_count["North"] += 1
-            self.cycle_count["South"] += 1
-        elif self.ew_state == "Green" and self.ns_state == "Red":
-            self.cycle_count["East"] += 1
-            self.cycle_count["West"] += 1
+                self.ns_state = "Green"  # Corrected to ensure NS turns green when EW turns red
+                self.change_time_ns = current_time + self.green_duration_ns + self.yellow_duration_ns
 
     def simulate_traffic(self, duration):
         start_time = time.time()
@@ -141,7 +133,7 @@ class Stoplight:
             print(f"Average Cars Passed Per Cycle: {average_per_cycle:.2f}")
             #print(f"Maximum Cars Passed in a Cycle: {max(queue, default=0)}")
             #print(f"Minimum Cars Passed in a Cycle: {min(queue, default=0)}")
-            print(" ")
+            #print(" ")
 
         #print(f"Red Light Violations: {self.red_light_violations}")
         #print(f"Stopped Cars at Red Light: {self.stopped_cars_at_red_light}")
@@ -151,7 +143,7 @@ class Stoplight:
         print("\nSimulation Summary Report:")
         print("=================================")
         print(f"Total Red Light Violations: {self.red_light_violations}")
-        print(f"Total Stopped Cars at Red Light: {self.stopped_cars_at_red_light}")
+        # Remove the line attempting to print stopped_cars_at_red_light
         print(f"Total Fines Collected: ${self.total_fines_collected}")
 
         print("\nTraffic Flow Summary:")
@@ -164,6 +156,18 @@ class Stoplight:
             print(f"Total Cars Passed: {total_passed}")
             print(f"Average Cars Passed Per Cycle: {average_per_cycle:.2f}")
             print(f"Total Cycles: {cycle_count}")
+
+            # Calculate duration of each light color
+            green_duration = self.durations["NS"]["Green"] if direction in ["North", "South"] else self.durations["EW"][
+                "Green"]
+            yellow_duration = self.durations["NS"]["Yellow"] if direction in ["North", "South"] else \
+            self.durations["EW"]["Yellow"]
+            red_duration = self.durations["NS"]["Red"] if direction in ["North", "South"] else self.durations["EW"][
+                "Red"]
+
+            print(f"Green Light Duration: {green_duration} seconds")
+            print(f"Yellow Light Duration: {yellow_duration} seconds")
+            print(f"Red Light Duration: {red_duration} seconds")
             print("---------------------------------")
 
 
