@@ -20,12 +20,20 @@ class Stoplight:
         self.total_fines_collected = 0
         self.total_cars_passed = {"North": 0, "South": 0, "East": 0, "West": 0}
         self.cycle_count = {"North": 0, "South": 0, "East": 0, "West": 0}
-        self.green_duration_ns = green_duration_ns  # Duration of green light for North/South
-        self.yellow_duration_ns = yellow_duration_ns  # Duration of yellow light for North/South
-        self.red_duration_ns = red_duration_ns   # Duration of red light for North/South
-        self.green_duration_ew = green_duration_ns  # Duration of green light for East/West
-        self.yellow_duration_ew = yellow_duration_ns  # Duration of yellow light for East/West
-        self.red_duration_ew = red_duration_ns   # Duration of red light for East/West
+        self.green_duration_ns = green_duration_ns
+        self.yellow_duration_ns = yellow_duration_ns
+        self.red_duration_ns = red_duration_ns
+        self.green_duration_ew = red_duration_ns  # Assuming initial green duration for East/West is the red duration of North/South
+        self.yellow_duration_ew = yellow_duration_ns
+        self.red_duration_ew = green_duration_ns + yellow_duration_ns
+
+        # Store original durations for dynamic adjustment
+        self.original_green_duration_ns = green_duration_ns
+        self.original_yellow_duration_ns = yellow_duration_ns
+        self.original_red_duration_ns = red_duration_ns
+        self.original_green_duration_ew = self.green_duration_ew
+        self.original_yellow_duration_ew = self.yellow_duration_ew
+        self.original_red_duration_ew = self.red_duration_ew
 
         self.change_time_ns = time.time() + self.green_duration_ns
         self.change_time_ew = time.time() + self.red_duration_ns  # Initially, East/West is red for the duration of NS green
@@ -33,29 +41,39 @@ class Stoplight:
     def update_state(self):
         current_time = time.time()
 
-        # North/South light state change
+        # Check if it's time to change the North/South light state
         if current_time >= self.change_time_ns:
             if self.ns_state == "Green":
                 self.ns_state = "Yellow"
                 self.change_time_ns = current_time + self.yellow_duration_ns
             elif self.ns_state == "Yellow":
                 self.ns_state = "Red"
-                self.ew_state = "Green"  # Corrected to ensure EW turns green when NS turns red
-                self.change_time_ew = current_time + self.green_duration_ew + self.yellow_duration_ew
-            elif self.ns_state == "Red" and current_time >= self.change_time_ew + self.red_duration_ew:
+                self.change_time_ns = current_time + self.red_duration_ns
+                # Ensure East/West will turn Green only after NS turns Red
+                self.change_time_ew = current_time + self.red_duration_ns
+            elif self.ns_state == "Red":
                 self.ns_state = "Green"
-                self.ew_state = "Red"
                 self.change_time_ns = current_time + self.green_duration_ns
+                # Increment cycle count for North/South direction
+                self.cycle_count["North"] += 1
+                self.cycle_count["South"] += 1
 
-        # East/West light state change
+        # Check if it's time to change the East/West light state
         if current_time >= self.change_time_ew:
             if self.ew_state == "Green":
                 self.ew_state = "Yellow"
                 self.change_time_ew = current_time + self.yellow_duration_ew
             elif self.ew_state == "Yellow":
                 self.ew_state = "Red"
-                self.ns_state = "Green"  # Corrected to ensure NS turns green when EW turns red
-                self.change_time_ns = current_time + self.green_duration_ns + self.yellow_duration_ns
+                self.change_time_ew = current_time + self.red_duration_ew
+                # Ensure NS will turn Green only after EW turns Red
+                self.change_time_ns = current_time + self.red_duration_ew
+            elif self.ew_state == "Red":
+                self.ew_state = "Green"
+                self.change_time_ew = current_time + self.green_duration_ew
+                # Increment cycle count for East/West direction
+                self.cycle_count["East"] += 1
+                self.cycle_count["West"] += 1
 
     def simulate_traffic(self, duration):
         start_time = time.time()
@@ -169,6 +187,41 @@ class Stoplight:
             print(f"Yellow Light Duration: {yellow_duration} seconds")
             print(f"Red Light Duration: {red_duration} seconds")
             print("---------------------------------")
+
+    def average_traffic(self, direction):
+        total_passed = self.total_cars_passed[direction]
+        cycle_count = self.cycle_count[direction]
+        return total_passed / cycle_count if cycle_count > 0 else 0
+
+    def check_traffic(self, direction):
+        if direction == "North" or direction == "South":
+            return len(self.queues[direction])
+        elif direction == "East" or direction == "West":
+            return 0  # For simplicity, assume no cars in the Eastbound or Westbound queues
+        else:
+            return 0  # Invalid direction
+
+    def adjust_light_durations_based_on_traffic(self):
+        queue_length_threshold = 10  # Threshold to trigger duration adjustments
+        adjustment_amount = 5  # Seconds to adjust light duration
+
+        # Adjust North/South green duration if East/West queues are long
+        east_west_queue_length = sum(len(self.queues[direction]) for direction in ["East", "West"])
+        if east_west_queue_length > queue_length_threshold:
+            self.green_duration_ew += adjustment_amount
+            self.red_duration_ns += adjustment_amount
+        else:
+            self.green_duration_ew = self.original_green_duration_ew
+            self.red_duration_ns = self.original_red_duration_ns
+
+        # Adjust East/West green duration if North/South queues are long
+        north_south_queue_length = sum(len(self.queues[direction]) for direction in ["North", "South"])
+        if north_south_queue_length > queue_length_threshold:
+            self.green_duration_ns += adjustment_amount
+            self.red_duration_ew += adjustment_amount
+        else:
+            self.green_duration_ns = self.original_green_duration_ns
+            self.red_duration_ew = self.original_red_duration_ew
 
 
 def main():
